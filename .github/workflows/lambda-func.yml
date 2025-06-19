@@ -3,39 +3,49 @@ name: Deploy AWS Lambda
 on:
   push:
     branches:
-      - main  # Runs when changes are pushed to the main branch
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: '3.9'
 
       - name: Install dependencies
-        run: pip install --target package boto3
+        run: |
+          mkdir -p package
+          if [ -f requirements.txt ]; then
+            pip install --target package -r requirements.txt
+          else
+            pip install --target package boto3
+          fi
 
       - name: Package Lambda Function
         run: |
+          cp lambda_function.py package/
           cd package
           zip -r ../lambda_function.zip .
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-          
-      - name: Deploy to AWS Lambda using AWS CLI
+
+      - name: Deploy to AWS Lambda
         run: |
-          aws lambda update-function-code --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} --zip-file fileb://lambda_function.zip
+          aws lambda update-function-code \
+            --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} \
+            --zip-file fileb://lambda_function.zip
 
-
-
-#
+      - name: Verify deployment
+        run: |
+          aws lambda get-function --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} \
+            --query 'Configuration.LastModified' --output text
